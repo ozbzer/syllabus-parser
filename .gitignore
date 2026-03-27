@@ -1,0 +1,5 @@
+.venv/
+.env
+.streamlit/
+.vscode/
+__pycache__/
