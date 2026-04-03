@@ -72,7 +72,9 @@ Syllabus text:
 
 def generate_prep_events(title, due_date, task_type):
     prep_events = [] # Create an empty list where I will store all the prep events
-    
+    clean_title = title.replace("Due", "").strip()
+    clean_title = clean_title.replace("Research Draft", "Proposal")
+    clean_title = clean_title.replace("Take-Home Exam", "Exam")
     # Step 1: decide prep steps 
     if task_type == "assignment":
         steps = [("Research", 7), ("Outline", 5), ("Draft", 3), ("Final Edit", 1)]
@@ -85,20 +87,17 @@ def generate_prep_events(title, due_date, task_type):
     else:
         steps = []
 
-    # convert string - date 
-    due_date_obj = datetime.strptime(due_date, "%Y-%m-%d")
-    
-    # loop through steps 
+    due = datetime.strptime(due_date, "%Y-%m-%d")
+
     for step_name, days_before in steps:
-        prep_date = due_date_obj - timedelta(days=days_before)
+        prep_date = due - timedelta(days=days_before)
 
-        event = {
-            "title": f"{step_name} {title}",
+        event_title = f"{step_name} for {clean_title}"
+
+        prep_events.append({
+            "title": event_title,
             "date": prep_date.strftime("%Y-%m-%d")
-        }
-
-        prep_events.append(event)
-
+        }) 
     return prep_events
    
 analyze_button = st.button("Analyze Syllabus")
@@ -135,8 +134,10 @@ if analyze_button:  # Run this code when the user clicks the Analyze button
 
                 ai_response = generate_ai_today_text(syllabus_text)
                 calendar_items = json.loads(ai_response)
+                st.session_state["calendar_items"] = calendar_items 
                 # New logic comes here 
                 prep_events_lists = []
+                st.session_state["prep_events_lists"] = prep_events_lists
                 for task in calendar_items:
                     title = task["title"]
                     due_date = task["date"]
@@ -147,32 +148,25 @@ if analyze_button:  # Run this code when the user clicks the Analyze button
 
                     prep_events = generate_prep_events(title, due_date, task_type)
                     prep_events_lists.extend(prep_events) # combined them into one list
-                # add preview here 
+                
+                # add preview here
                 st.subheader("Deadlines Found")
-
-                for item in calendar_items:
-                    title = item["title"]
-                    date = item["date"]
-
+                for event in calendar_items:
+                    title = event["title"]
+                    date = event["date"]
                     if not date:
-                        continue
-
-                    formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime("%b %d, %Y")
-
-                    st.write(f"**{title}** - {formatted_date}")
+                        continue 
+                    formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime("%B %d, %Y")
+                    st.write(f"**{title}** — {formatted_date}")
 
                 st.subheader("Your Study Plan")
-
                 for prep_event in prep_events_lists:
                     title = prep_event["title"]
                     date = prep_event["date"]
-
                     if not date:
                         continue
-
-                    formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime("%b %d, %Y")
-
-                    st.write(f"**{title}** - {formatted_date}")
+                    formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime("%B %d, %Y")
+                    st.write(f"**{title}** — {formatted_date}")
                     
                 calendar_text = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Syllabus Parser//EN\n"
                 for item in calendar_items:
@@ -180,7 +174,6 @@ if analyze_button:  # Run this code when the user clicks the Analyze button
                     date = item["date"]
                     if not date:
                         continue
-                    time = item["time"]
                     description = item["description"]
 
                     event_text = f"""BEGIN:VEVENT
