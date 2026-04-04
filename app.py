@@ -94,6 +94,9 @@ def generate_prep_events(title, due_date, task_type):
 
         event_title = f"{step_name} for {clean_title}"
 
+        words = event_title.split()
+        event_title = " ".join(dict.fromkeys(words))
+
         prep_events.append({
             "title": event_title,
             "date": prep_date.strftime("%Y-%m-%d")
