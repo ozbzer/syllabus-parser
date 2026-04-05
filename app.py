@@ -22,10 +22,10 @@ else:
     st.text("Please upload your syllabus")
 
 def generate_ai_today_text(syllabus_text):
-    prompt = f"""
+    prompt = prompt = f"""
 You are an academic syllabus parser.
 
-Read the syllabus text below and extract all important academic deadlines and events that should be added to a student's personal calendar.
+Read the syllabus text below and extract all important academic deadlines and scheduled course events that should be added to a student's personal calendar.
 
 Look for:
 - assignments
@@ -34,9 +34,15 @@ Look for:
 - projects
 - presentations
 - labs
-- readings only if they have a due date
+- reflections
+- field trips
+- artist talks
+- waivers
+- extra credit assignments
+- attendance events if they have specific dates
 - important class deadlines
 - final exams or major assessments
+- readings only if they have a clear due date
 
 Return only valid JSON.
 Do not return explanations, markdown, headings, or extra text.
@@ -45,8 +51,8 @@ Return a JSON array.
 Each item in the array must follow this format:
 {{
   "title": "string",
-  "type": "assignment | quiz | exam | project | presentation | lab | reading | deadline",
-  "date": "YYYY-MM-DD or null",
+  "type": "assignment | quiz | exam | project | presentation | lab | reading | deadline | field_trip | attendance",
+  "date": "YYYY-MM-DD",
   "time": "HH:MM or null",
   "description": "short helpful detail or null"
 }}
@@ -59,6 +65,15 @@ Rules:
 - Keep titles short and student-friendly.
 - Sort items by date from earliest to latest.
 - If no valid calendar items are found, return [].
+- If a course item has multiple dates, create a separate JSON item for each date.
+- If deadlines appear in a table, extract them row by row.
+- If one table row contains one title and several dates, repeat the title for each date.
+- Treat quizzes, reflections, projects, field trips, artist talks, presentations, waivers, attendance events, and extra credit as calendar items when dates are given.
+- Ignore general university deadlines unless they are clearly relevant to this specific course.
+- Prefer course-specific evaluation deadlines over broad institutional calendar dates.
+- If a title includes numbering such as Quiz 1, Quiz 2, Reflection 1, Reflection 2, keep that numbering when it is clear from the syllabus.
+- If an event is described as "due", "is due", "due date", or appears in an evaluation/deadlines table, include it.
+- If several course events share the same date, include all of them as separate items.
 
 Syllabus text:
 {syllabus_text}
