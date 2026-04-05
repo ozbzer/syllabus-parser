@@ -32,9 +32,27 @@ Look for:
 - projects
 - presentations
 - labs
+- essays
+- reports
 - readings only if they have a due date
 - important class deadlines
 - final exams or major assessments
+- labs only when something must be submitted, completed, or prepared by a certain date
+- waivers or required forms only when they have a due date
+- graded attendance only if the syllabus clearly treats it as an assessed requirement with a date
+
+Do NOT include:
+- lecture topics
+- attendance
+- weekly themes
+- class meetings
+- field trips by themselves
+- artist talks by themselves
+- readings unless explicitly due
+- general course activities
+- office hours
+- location information
+- announcements without a deadline
 
 Return only valid JSON.
 Do not return explanations, markdown, headings, or extra text.
@@ -43,10 +61,12 @@ Return a JSON array.
 Each item in the array must follow this format:
 {{
   "title": "string",
-  "type": "assignment | quiz | exam | project | presentation | lab | reading | deadline",
+  "type": "assignment | quiz | exam | project | presentation | lab | reading | reflection | paper | essay | report | lab | deadline",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
-  "description": "short helpful detail or null"
+  "description": "short helpful detail or null",
+  "source_section": "evaluation | schedule | other"
+  "evidence_text": "exact short quote or excerpt from the syllabus supporting the date"
 }}
 
 Rules:
@@ -57,6 +77,15 @@ Rules:
 - Keep titles short and student-friendly.
 - Sort items by date from earliest to latest.
 - Don't include items that are not calendar-worthy (e.g., "Office Hours", "Syllabus Overview")
+- If a syllabus contains both a course evaluation section and a weekly schedule, prioritize dates from the evaluation/grading section for quizzes, exams, projects, presentations, reflections, and other graded work.
+- Do not use lecture-topic dates as assignment dates unless the syllabus clearly says the item is due on that date.
+- For each item, label where the date came from:
+  - "evaluation" if it came from a grading/evaluation/assessment table or section
+  - "schedule" if it came from the weekly course calendar or class schedule
+  - "other" otherwise
+- If the same graded item appears more than once with conflicting dates, prefer the one from "evaluation".
+- Only include an item if you can provide a short exact supporting excerpt from the syllabus.
+- If the date is uncertain or conflicting, prefer the item with clearer evidence from an evaluation/grading section.
 - If no valid calendar items are found, return [].
 
 Syllabus text:
@@ -83,6 +112,14 @@ def generate_prep_events(title, due_date, task_type):
         steps = [("Review Notes", 3), ("Practice Questions", 1)]
     elif task_type == "project":
         steps = [("Plan Project", 10), ("Work Session 1", 7), ("Work Session 2", 4), ("Final Touches", 1)]
+    elif task_type == "presentation":
+        steps = [("Research", 7), ("Slides Draft", 4), ("Practice", 2)]
+    elif task_type == "reflection":
+        steps = [("Review Notes", 3), ("Draft Reflection", 1)]
+    elif task_type == "lab":
+        steps = [("Prepare Materials", 2), ("Review Instructions", 1)]
+    elif task_type == "deadline":
+        steps = [("Start Task", 5), ("Finish Task", 1)]
     else:
         steps = []
 
@@ -104,38 +141,72 @@ def generate_prep_events(title, due_date, task_type):
    
 analyze_button = st.button("Analyze Syllabus")
 
-if analyze_button:  # Run this code when the user clicks the Analyze button
-    if uploaded_file:  # Check if the user actually uploaded a file
-        st.text("Analyzing syllabus...")  # Show a message so the user knows work is happening
+def prefer_evaluation_dates(calendar_items):
+    final = {}
+    for item in calendar_items:
+        key = item.get("title", "").strip().lower()
+        if not key:
+            continue
 
-        syllabus_text = ""  # Start with empty text; we will add each page's text into this
-         
+        # If same item appears twice → prefer evaluation
+        if key not in final or item.get("source_section") == "evaluation":
+            final[key] = item
+
+    return list(final.values())
+
+if analyze_button:
+    if uploaded_file:
+        st.text("Analyzing syllabus...")
+
+        syllabus_text = ""
+
         if uploaded_file.name.endswith(".pdf"):
-            pdf_reader = PdfReader(uploaded_file) 
-            for page in pdf_reader.pages:  # Go through the PDF one page at a time
-                page_text = page.extract_text()  # Try to get the text from the current page
-                if page_text:  # Only use the page if some text was found
-                    syllabus_text += page_text + "\n"  # Keep adding page text into the full syllabus text
-        
+            pdf_reader = PdfReader(uploaded_file)
+
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    syllabus_text += page_text + "\n"
+
         elif uploaded_file.name.endswith(".docx"):
             from docx import Document
-            doc = Document(uploaded_file)
-            for para in doc.paragraphs:
-                syllabus_text += para.text + "\n"
 
-        if syllabus_text.strip():  # Check if the final text is not empty
+            doc = Document(uploaded_file)
+
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    syllabus_text += para.text.strip() + "\n"
+
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            row_text.append(cell_text)
+
+                    if row_text:
+                        syllabus_text += " | ".join(row_text) + "\n"
+
+        if syllabus_text.strip():
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 try:
                     api_key = st.secrets.get("OPENAI_API_KEY")
                 except StreamlitSecretNotFoundError:
                     api_key = None
-                
+
             if api_key:
                 client = OpenAI(api_key=api_key)
 
                 ai_response = generate_ai_today_text(syllabus_text)
-                calendar_items = json.loads(ai_response)
+                try:
+                    calendar_items = json.loads(ai_response)
+                    calendar_items = prefer_evaluation_dates(calendar_items) 
+                except json.JSONDecodeError:
+                    st.error("AI response was not valid JSON.")
+                    st.text_area("Raw AI response", ai_response, height=300)
+                    st.stop()
                 st.session_state["calendar_items"] = calendar_items 
                 # New logic comes here 
                 prep_events_lists = []
@@ -155,6 +226,7 @@ if analyze_button:  # Run this code when the user clicks the Analyze button
                 st.subheader("Deadlines Found")
                 for event in calendar_items:
                     title = event["title"]
+                    title = title.replace(" Due", "").strip()
                     date = event["date"]
                     if not date:
                         continue 
@@ -209,7 +281,7 @@ END:VEVENT
             else:
                 st.warning("OpenAI API key not found. Please set OPENAI_API_KEY.")
         else:
-            st.warning("Could not extract text from this PDF.")
+            st.warning("Could not extract text from this file.Try another syllabus or format.")
     else:
         st.warning("Please upload a syllabus first")
 
